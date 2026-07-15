@@ -5,7 +5,6 @@ import com.zage.zage.dto.StaffResponseDto;
 import com.zage.zage.exception.DuplicateException;
 import com.zage.zage.exception.ResourceNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import com.zage.zage.repository.AuthRepository;
 import com.zage.zage.repository.StaffRepository;
 import com.zage.zage.service.StaffService;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +17,6 @@ import java.util.List;
 public class StaffServiceImpl implements StaffService {
 
     private final StaffRepository staffRepository;
-    private final AuthRepository authRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Override
@@ -31,8 +29,9 @@ public class StaffServiceImpl implements StaffService {
             throw new DuplicateException("Staffname already exists");
         }
 
+        // Encode password before saving
+        dto.setPassword(passwordEncoder.encode(dto.getPassword()));
         Long staffId = staffRepository.saveStaff(dto);
-        authRepository.saveLogin(staffId, dto.getStaffname(), passwordEncoder.encode(dto.getPassword()), "ROLE_STAFF");
 
         return staffRepository.findById(staffId).get();
     }

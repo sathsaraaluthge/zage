@@ -22,31 +22,20 @@ public class CustomerRepository {
 
     private final JdbcTemplate jdbcTemplate;
 
-    public Long saveCustomer(CustomerRequestDto dto) {
+    public Long saveCustomer(Long userId, CustomerRequestDto dto) {
         String sql = """
             INSERT INTO customers
-            (first_name, last_name, email, phone, date_of_birth, gender, address_line1, address_line2, city, state, postal_code, country, profile_image, notes)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            (address, date_of_birth, users_id)
+            VALUES (?,?,?)
             """;
 
         KeyHolder keyHolder = new GeneratedKeyHolder();
 
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
-            ps.setString(1, dto.getFirstName());
-            ps.setString(2, dto.getLastName());
-            ps.setString(3, dto.getEmail());
-            ps.setString(4, dto.getPhone());
-            ps.setDate(5, dto.getDateOfBirth() != null ? Date.valueOf(dto.getDateOfBirth()) : null);
-            ps.setString(6, dto.getGender());
-            ps.setString(7, dto.getAddressLine1());
-            ps.setString(8, dto.getAddressLine2());
-            ps.setString(9, dto.getCity());
-            ps.setString(10, dto.getState());
-            ps.setString(11, dto.getPostalCode());
-            ps.setString(12, dto.getCountry());
-            ps.setString(13, dto.getProfileImage());
-            ps.setString(14, dto.getNotes());
+            ps.setString(1, dto.getAddressLine1());
+            ps.setDate(2, dto.getDateOfBirth() != null ? Date.valueOf(dto.getDateOfBirth()) : null);
+            ps.setLong(3, userId);
             return ps;
         }, keyHolder);
 
@@ -54,50 +43,55 @@ public class CustomerRepository {
     }
 
     public Optional<CustomerResponseDto> findById(Long id) {
-        String sql = "SELECT * FROM customers WHERE id=?";
+        String sql = """
+            SELECT c.id, c.address, c.date_of_birth, c.created_at, c.users_id,
+                   u.name, u.email, u.phone, u.status
+            FROM customers c
+            JOIN users u ON c.users_id = u.id
+            WHERE c.id=?
+            """;
         List<CustomerResponseDto> result = jdbcTemplate.query(sql, this::mapRow, id);
         return result.stream().findFirst();
     }
 
     public List<CustomerResponseDto> findAll() {
-        String sql = "SELECT * FROM customers";
+        String sql = """
+            SELECT c.id, c.address, c.date_of_birth, c.created_at, c.users_id,
+                   u.name, u.email, u.phone, u.status
+            FROM customers c
+            JOIN users u ON c.users_id = u.id
+            """;
         return jdbcTemplate.query(sql, this::mapRow);
     }
 
-    public boolean existsByEmail(String email) {
-        Integer count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM customers WHERE email=?",
-                Integer.class,
-                email);
-        return count != null && count > 0;
-    }
+
 
     public void delete(Long id) {
         jdbcTemplate.update("DELETE FROM customers WHERE id=?", id);
     }
 
     private CustomerResponseDto mapRow(ResultSet rs, int row) throws SQLException {
+        String fullName = rs.getString("name");
+        String firstName = "";
+        String lastName = "";
+        if (fullName != null) {
+            String[] parts = fullName.split(" ", 2);
+            firstName = parts[0];
+            if (parts.length > 1) {
+                lastName = parts[1];
+            }
+        }
+
         return CustomerResponseDto.builder()
                 .id(rs.getLong("id"))
-                .firstName(rs.getString("first_name"))
-                .lastName(rs.getString("last_name"))
+                .firstName(firstName)
+                .lastName(lastName)
                 .email(rs.getString("email"))
                 .phone(rs.getString("phone"))
                 .dateOfBirth(rs.getDate("date_of_birth") != null ? rs.getDate("date_of_birth").toLocalDate() : null)
-                .gender(rs.getString("gender"))
-                .addressLine1(rs.getString("address_line1"))
-                .addressLine2(rs.getString("address_line2"))
-                .city(rs.getString("city"))
-                .state(rs.getString("state"))
-                .postalCode(rs.getString("postal_code"))
-                .country(rs.getString("country"))
-                .profileImage(rs.getString("profile_image"))
-                .notes(rs.getString("notes"))
-                .status(rs.getBoolean("status"))
-                .createdAt(
-                        rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toLocalDateTime() : null)
-                .updatedAt(
-                        rs.getTimestamp("updated_at") != null ? rs.getTimestamp("updated_at").toLocalDateTime() : null)
+                .addressLine1(rs.getString("address"))
+                .status("ACTIVE".equalsIgnoreCase(rs.getString("status")))
+                .createdAt(rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toLocalDateTime() : null)
                 .build();
     }
 }

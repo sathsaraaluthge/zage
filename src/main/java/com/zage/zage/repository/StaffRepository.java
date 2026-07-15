@@ -23,8 +23,8 @@ public class StaffRepository {
 
     public Long saveStaff(StaffRequestDto dto) {
         String sql = """
-            INSERT INTO staff
-            (staffname, email, first_name, last_name, phone)
+            INSERT INTO users
+            (name, email, phone, password, role)
             VALUES (?,?,?,?,?)
             """;
 
@@ -32,11 +32,11 @@ public class StaffRepository {
 
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
-            ps.setString(1, dto.getStaffname());
+            ps.setString(1, dto.getFirstName() + " " + dto.getLastName()); // assuming staffname is passed as well, but we use name for Users table
             ps.setString(2, dto.getEmail());
-            ps.setString(3, dto.getFirstName());
-            ps.setString(4, dto.getLastName());
-            ps.setString(5, dto.getPhone());
+            ps.setString(3, dto.getPhone());
+            ps.setString(4, dto.getPassword());
+            ps.setString(5, "STAFF");
             return ps;
         }, keyHolder);
 
@@ -44,46 +44,58 @@ public class StaffRepository {
     }
 
     public Optional<StaffResponseDto> findById(Long id) {
-        String sql = "SELECT * FROM staff WHERE id=?";
+        String sql = "SELECT * FROM users WHERE id=? AND role='STAFF'";
         List<StaffResponseDto> result = jdbcTemplate.query(sql, this::mapRow, id);
         return result.stream().findFirst();
     }
 
     public List<StaffResponseDto> findAll() {
-        String sql = "SELECT * FROM staff";
+        String sql = "SELECT * FROM users WHERE role='STAFF'";
         return jdbcTemplate.query(sql, this::mapRow);
     }
 
     public boolean existsByEmail(String email) {
         Integer count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM staff WHERE email=?",
+                "SELECT COUNT(*) FROM users WHERE email=? AND role='STAFF'",
                 Integer.class,
                 email);
         return count != null && count > 0;
     }
 
     public boolean existsByStaffname(String staffname) {
+        // Since we map staffname to name in the users table
         Integer count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM staff WHERE staffname=?",
+                "SELECT COUNT(*) FROM users WHERE name=? AND role='STAFF'",
                 Integer.class,
                 staffname);
         return count != null && count > 0;
     }
 
     public void delete(Long id) {
-        jdbcTemplate.update("DELETE FROM staff WHERE id=?", id);
+        jdbcTemplate.update("DELETE FROM users WHERE id=? AND role='STAFF'", id);
     }
 
     private StaffResponseDto mapRow(ResultSet rs, int row) throws SQLException {
+        String fullName = rs.getString("name");
+        String firstName = "";
+        String lastName = "";
+        if (fullName != null) {
+            String[] parts = fullName.split(" ", 2);
+            firstName = parts[0];
+            if (parts.length > 1) {
+                lastName = parts[1];
+            }
+        }
+
         return StaffResponseDto.builder()
                 .id(rs.getLong("id"))
-                .staffname(rs.getString("staffname"))
+                .staffname(fullName)
                 .email(rs.getString("email"))
-                .firstName(rs.getString("first_name"))
-                .lastName(rs.getString("last_name"))
+                .firstName(firstName)
+                .lastName(lastName)
                 .phone(rs.getString("phone"))
-                .status(rs.getBoolean("status"))
-                .createdAt(rs.getTimestamp("created_at").toLocalDateTime())
+                .status("ACTIVE".equalsIgnoreCase(rs.getString("status")))
+                .createdAt(rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toLocalDateTime() : null)
                 .build();
     }
 }
